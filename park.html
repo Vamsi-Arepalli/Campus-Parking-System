@@ -3304,6 +3304,192 @@
             }
         `;
         document.head.appendChild(style);
+        // Update the JavaScript section in park.html with this:
+            // Configuration
+            const API_BASE_URL = 'http://localhost:3000/api';
+            const appState = {
+                isLoggedIn: false,
+                currentUser: null,
+                authToken: null,
+                currentZone: 'A'
+            };
+            
+            // Initialize the application
+            async function initializeApp() {
+                // Initialize date fields
+                const today = new Date().toISOString().split('T')[0];
+                const dateInput = document.getElementById('date');
+                if (dateInput) {
+                    dateInput.min = today;
+                    dateInput.value = today;
+                }
+                
+                // Set default times
+                const now = new Date();
+                const startTime = new Date(now.getTime() + 30 * 60000);
+                const endTime = new Date(startTime.getTime() + 3 * 60 * 60000);
+                
+                const startTimeInput = document.getElementById('start-time');
+                const endTimeInput = document.getElementById('end-time');
+                if (startTimeInput && endTimeInput) {
+                    startTimeInput.value = startTime.toTimeString().substring(0,5);
+                    endTimeInput.value = endTime.toTimeString().substring(0,5);
+                }
+                
+                // Load initial data
+                await loadInitialData();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                // Setup back to top button
+                setupBackToTop();
+                
+                // Show welcome message
+                showToast('Welcome to KL University Smart Parking System!', 'info');
+            }
+            
+            async function loadInitialData() {
+                try {
+                    // Load parking spots for default zone
+                    await loadParkingSpots('A');
+                    
+                    // Load zone statistics
+                    await loadZoneStatistics();
+                    
+                    // Load statistics
+                    await loadStatistics();
+                    
+                    // Load recent activity
+                    await loadRecentActivity();
+                    
+                } catch (error) {
+                    console.error('Error loading initial data:', error);
+                    showToast('Error loading data. Please try again.', 'error');
+                }
+            }
+            
+            async function loadParkingSpots(zone) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/parking/${zone}`);
+                    if (!response.ok) throw new Error('Failed to load parking spots');
+                    
+                    const spots = await response.json();
+                    renderParkingGrid(zone, spots);
+                } catch (error) {
+                    console.error('Error loading parking spots:', error);
+                    // Fallback to mock data
+                    renderParkingGrid(zone, generateMockSpots(zone));
+                }
+            }
+            
+            async function loadZoneStatistics() {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/zones`);
+                    if (!response.ok) throw new Error('Failed to load zone statistics');
+                    
+                    const zones = await response.json();
+                    updateZoneInfo(zones);
+                } catch (error) {
+                    console.error('Error loading zone statistics:', error);
+                }
+            }
+            
+            async function loadStatistics() {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/statistics`);
+                    if (!response.ok) throw new Error('Failed to load statistics');
+                    
+                    const stats = await response.json();
+                    updateStatistics(stats);
+                } catch (error) {
+                    console.error('Error loading statistics:', error);
+                }
+            }
+            
+            async function loadRecentActivity() {
+                if (appState.isLoggedIn && appState.currentUser) {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/reservations/${appState.currentUser.id}`);
+                        if (!response.ok) throw new Error('Failed to load reservations');
+                        
+                        const reservations = await response.json();
+                        renderRecentActivity(reservations.slice(0, 5)); // Show only 5 most recent
+                    } catch (error) {
+                        console.error('Error loading recent activity:', error);
+                    }
+                }
+            }
+            
+            // ... Rest of your existing JavaScript functions with API calls ...
+            
+            // Example of updated handleReservationSubmit function:
+            async function handleReservationSubmit(e) {
+                e.preventDefault();
+                
+                if (!appState.isLoggedIn) {
+                    showToast('Please login to make a reservation', 'warning');
+                    showAuthModal();
+                    return;
+                }
+                
+                // Collect form data
+                const formData = {
+                    zone: document.getElementById('zone').value,
+                    spotId: selectedSpot || findAvailableSpot(),
+                    date: document.getElementById('date').value,
+                    startTime: document.getElementById('start-time').value,
+                    endTime: document.getElementById('end-time').value,
+                    userId: appState.currentUser.id,
+                    vehicle: document.getElementById('vehicle').value,
+                    kluId: document.getElementById('klu-id').value
+                };
+                
+                if (!formData.spotId) {
+                    showToast('Please select a parking spot', 'warning');
+                    return;
+                }
+                
+                showLoading();
+                
+                try {
+                    const response = await fetch(`${API_BASE_URL}/reservations`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${appState.authToken}`
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Failed to make reservation');
+                    }
+                    
+                    hideLoading();
+                    
+                    // Update UI
+                    await loadParkingSpots(formData.zone);
+                    await loadStatistics();
+                    await loadRecentActivity();
+                    
+                    showToast(result.message, 'success');
+                    
+                    // Reset form
+                    e.target.reset();
+                    
+                } catch (error) {
+                    hideLoading();
+                    showToast(error.message, 'error');
+                }
+            }
+            
+            // ... Add similar API calls for other functions ...
+            
+            // Initialize when DOM is loaded
+            document.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>
